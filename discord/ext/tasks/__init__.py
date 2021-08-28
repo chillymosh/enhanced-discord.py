@@ -488,11 +488,7 @@ class Loop(Generic[LF]):
             The function was not a coroutine.
         """
 
-        if not inspect.iscoroutinefunction(coro):
-            raise TypeError(f'Expected coroutine function, received {coro.__class__.__name__!r}.')
-
-        self._before_loop = coro
-        return coro
+        return self._raise_expected_coro(coro)
 
     def after_loop(self, coro: FT) -> FT:
         """A decorator that register a coroutine to be called after the loop finished running.
@@ -516,11 +512,7 @@ class Loop(Generic[LF]):
             The function was not a coroutine.
         """
 
-        if not inspect.iscoroutinefunction(coro):
-            raise TypeError(f'Expected coroutine function, received {coro.__class__.__name__!r}.')
-
-        self._after_loop = coro
-        return coro
+        return self._raise_expected_coro(coro)
 
     def error(self, coro: ET) -> ET:
         """A decorator that registers a coroutine to be called if the task encounters an unhandled exception.
@@ -542,10 +534,14 @@ class Loop(Generic[LF]):
         TypeError
             The function was not a coroutine.
         """
-        if not inspect.iscoroutinefunction(coro):
-            raise TypeError(f'Expected coroutine function, received {coro.__class__.__name__!r}.')
+        return self._raise_expected_coro(coro)
 
-        self._error = coro  # type: ignore
+    def _raise_expected_coro(self, coro):
+        if not inspect.iscoroutinefunction(coro):
+            raise TypeError(
+                f'Expected coroutine function, received {coro.__class__.__name__!r}.'
+            )
+
         return coro
 
     def _get_next_sleep_time(self) -> datetime.datetime:
@@ -614,8 +610,7 @@ class Loop(Generic[LF]):
                 )
             ret.append(t if t.tzinfo is not None else t.replace(tzinfo=utc))
 
-        ret = sorted(set(ret))  # de-dupe and sort times
-        return ret
+        return sorted(set(ret))
 
     def change_interval(
         self,
