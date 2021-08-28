@@ -629,12 +629,10 @@ class BotBase(GroupMixin):
 
         # remove all the listeners from the module
         for event_list in self.extra_events.copy().values():
-            remove = [
-                index
-                for index, event in enumerate(event_list)
-                if event.__module__ is not None
-                and _is_submodule(name, event.__module__)
-            ]
+            remove = []
+            for index, event in enumerate(event_list):
+                if event.__module__ is not None and _is_submodule(name, event.__module__):
+                    remove.append(index)
 
             for index in reversed(remove):
                 del event_list[index]
