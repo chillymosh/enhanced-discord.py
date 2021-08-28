@@ -22,6 +22,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
+from TwitchIO.twitchio.ext.commands import utils
 from __future__ import annotations
 
 
@@ -43,6 +44,7 @@ from .context import Context
 from . import errors
 from .help import HelpCommand, DefaultHelpCommand
 from .cog import Cog
+from discord.utils import raise_expected_coro
 
 if TYPE_CHECKING:
     import importlib.machinery
@@ -379,7 +381,7 @@ class BotBase(GroupMixin):
         TypeError
             The coroutine passed is not actually a coroutine.
         """
-        return self._raise_expected_coro(
+        return raise_expected_coro(
             coro, 'The pre-invoke hook must be a coroutine.'
         )
 
@@ -410,16 +412,10 @@ class BotBase(GroupMixin):
         TypeError
             The coroutine passed is not actually a coroutine.
         """
-        return self._raise_expected_coro(
+        return raise_expected_coro(
             coro, 'The post-invoke hook must be a coroutine.'
         )
 
-
-    def _raise_expected_coro(self, coro, arg1):
-        if not asyncio.iscoroutinefunction(coro):
-            raise TypeError(arg1)
-
-        return coro
 
     # listener registration
 
