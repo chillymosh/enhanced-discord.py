@@ -379,11 +379,9 @@ class BotBase(GroupMixin):
         TypeError
             The coroutine passed is not actually a coroutine.
         """
-        if not asyncio.iscoroutinefunction(coro):
-            raise TypeError('The pre-invoke hook must be a coroutine.')
-
-        self._before_invoke = coro
-        return coro
+        return self._raise_expected_coro(
+            coro, 'The pre-invoke hook must be a coroutine.'
+        )
 
     def after_invoke(self, coro: CFT) -> CFT:
         r"""A decorator that registers a coroutine as a post-invoke hook.
@@ -412,10 +410,15 @@ class BotBase(GroupMixin):
         TypeError
             The coroutine passed is not actually a coroutine.
         """
-        if not asyncio.iscoroutinefunction(coro):
-            raise TypeError('The post-invoke hook must be a coroutine.')
+        return self._raise_expected_coro(
+            coro, 'The post-invoke hook must be a coroutine.'
+        )
 
-        self._after_invoke = coro
+
+    def _raise_expected_coro(self, coro, arg1):
+        if not asyncio.iscoroutinefunction(coro):
+            raise TypeError(arg1)
+
         return coro
 
     # listener registration
@@ -626,10 +629,12 @@ class BotBase(GroupMixin):
 
         # remove all the listeners from the module
         for event_list in self.extra_events.copy().values():
-            remove = []
-            for index, event in enumerate(event_list):
-                if event.__module__ is not None and _is_submodule(name, event.__module__):
-                    remove.append(index)
+            remove = [
+                index
+                for index, event in enumerate(event_list)
+                if event.__module__ is not None
+                and _is_submodule(name, event.__module__)
+            ]
 
             for index in reversed(remove):
                 del event_list[index]
