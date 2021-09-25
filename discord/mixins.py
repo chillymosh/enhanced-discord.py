@@ -23,9 +23,10 @@ DEALINGS IN THE SOFTWARE.
 """
 
 __all__ = (
-    'EqualityComparable',
-    'Hashable',
+    "EqualityComparable",
+    "Hashable",
 )
+
 
 class EqualityComparable:
     __slots__ = ()
@@ -40,8 +41,12 @@ class EqualityComparable:
             return other.id != self.id
         return True
 
+
 class Hashable(EqualityComparable):
     __slots__ = ()
+
+    def __int__(self) -> int:
+        return self.id
 
     def __hash__(self) -> int:
         return self.id >> 22
