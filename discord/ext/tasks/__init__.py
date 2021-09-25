@@ -46,9 +46,7 @@ import traceback
 
 from collections.abc import Sequence
 from discord.backoff import ExponentialBackoff
-from discord.utils import MISSING, raise_expected_coro
-
-
+from discord.utils import MISSING
 
 __all__ = ("loop",)
 
@@ -614,7 +612,8 @@ class Loop(Generic[LF]):
                 )
             ret.append(t if t.tzinfo is not None else t.replace(tzinfo=utc))
 
-        return sorted(set(ret))
+        ret = sorted(set(ret))  # de-dupe and sort times
+        return ret
 
     def change_interval(
         self,
