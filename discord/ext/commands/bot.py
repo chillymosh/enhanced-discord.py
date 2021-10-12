@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import collections.abc
+from functools import cached_property
 
 import inspect
 import importlib.util
@@ -73,7 +74,9 @@ from discord.utils import raise_expected_coro
 if TYPE_CHECKING:
     import importlib.machinery
 
+    from discord.role import Role
     from discord.message import Message
+    from discord.abc import PartialMessageableChannel
     from ._types import (
         Check,
         CoroFunc,
@@ -95,9 +98,16 @@ CXT = TypeVar("CXT", bound="Context")
 
 class _FakeSlashMessage(discord.PartialMessage):
     activity = application = edited_at = reference = webhook_id = None
-    attachments = components = reactions = stickers = mentions = []
-    author: Union[discord.User, discord.Member]
+    attachments = components = reactions = stickers = []
     tts = False
+
+    raw_mentions = discord.Message.raw_mentions
+    clean_content = discord.Message.clean_content
+    channel_mentions = discord.Message.channel_mentions
+    raw_role_mentions = discord.Message.raw_role_mentions
+    raw_channel_mentions = discord.Message.raw_channel_mentions
+
+    author: Union[discord.User, discord.Member]
 
     @classmethod
     def from_interaction(
@@ -108,6 +118,22 @@ class _FakeSlashMessage(discord.PartialMessage):
         self.author = interaction.user
 
         return self
+
+    @cached_property
+    def mentions(self) -> List[Union[discord.Member, discord.User]]:
+        client = self._state._get_client()
+        if self.guild:
+            ensure_user = lambda id: self.guild.get_member(id) or client.get_user(id)  # type: ignore
+        else:
+            ensure_user = client.get_user
+
+        return discord.utils._unique(filter(None, map(ensure_user, self.raw_mentions)))
+
+    @cached_property
+    def role_mentions(self) -> List[Role]:
+        if self.guild is None:
+            return []
+        return discord.utils._unique(filter(None, map(self.guild.get_role, self.raw_role_mentions)))
 
 
 def when_mentioned(bot: Union[Bot, AutoShardedBot], msg: Message) -> List[str]:
@@ -1064,6 +1090,9 @@ class BotBase(GroupMixin):
             A list of prefixes or a single prefix that the bot is
             listening for.
         """
+        if isinstance(message, _FakeSlashMessage):
+            return "/"
+
         prefix = ret = self.command_prefix
         if callable(prefix):
             ret = await discord.utils.maybe_coroutine(prefix, self, message)
@@ -1260,15 +1289,12 @@ class BotBase(GroupMixin):
             else:
                 return  # cannot do anything without stable channel
 
-        # Fetch a valid prefix, so process_commands can function
+        # Make our fake message so we can pass it to ext.commands
         message: discord.Message = _FakeSlashMessage.from_interaction(interaction, channel)  # type: ignore
-        prefix = await self.get_prefix(message)
-        if isinstance(prefix, list):
-            prefix = prefix[0]
+        message.content = f"/{command_name}"
 
         # Add arguments to fake message content, in the right order
         ignore_params: List[inspect.Parameter] = []
-        message.content = f"{prefix}{command_name} "
         for name, param in command.clean_params.items():
             if inspect.isclass(param.annotation) and issubclass(param.annotation, FlagConverter):
                 for name, flag in param.annotation.get_flags().items():
@@ -1280,7 +1306,7 @@ class BotBase(GroupMixin):
                     else:
                         prefix = param.annotation.__commands_flag_prefix__
                         delimiter = param.annotation.__commands_flag_delimiter__
-                        message.content += f"{prefix}{name} {option['value']}{delimiter}"  # type: ignore
+                        message.content += f" {prefix}{name}{delimiter}{option['value']}"  # type: ignore
                 continue
 
             option = next((o for o in command_options if o["name"] == name), None)
@@ -1296,9 +1322,9 @@ class BotBase(GroupMixin):
             ):
                 # String with space in without "consume rest"
                 option = cast(_ApplicationCommandInteractionDataOptionString, option)
-                message.content += f"{_quote_string_safe(option['value'])} "
+                message.content += f" {_quote_string_safe(option['value'])}"
             else:
-                message.content += f'{option.get("value", "")} '
+                message.content += f' {option.get("value", "")}'
 
         ctx = await self.get_context(message)
         ctx._ignored_params = ignore_params
