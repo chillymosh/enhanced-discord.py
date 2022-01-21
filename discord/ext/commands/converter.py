@@ -601,6 +601,7 @@ class ColourConverter(Converter[discord.Colour]):
 
     The following formats are accepted:
 
+    - ``<hex>``
     - ``0x<hex>``
     - ``#<hex>``
     - ``0x#<hex>``
@@ -671,7 +672,9 @@ class ColourConverter(Converter[discord.Colour]):
 
         arg = arg.replace(" ", "_")
         method = getattr(discord.Colour, arg, None)
-        if arg.startswith("from_") or method is None or not inspect.ismethod(method):
+        if method is None:
+            return self.parse_hex_number(argument)
+        elif arg.startswith("from_") or not inspect.ismethod(method):
             raise BadColourArgument(arg)
         return method()
 
@@ -1031,6 +1034,8 @@ class Option(Generic[T, DT]):  # type: ignore
         The default for this option, overwrites Option during parsing.
     description: :class:`str`
         The description for this option, is unpacked to :attr:`.Command.option_descriptions`
+    name: :class:`str`
+        The name of the option. This defaults to the parameter name.
     """
 
     description: DT
@@ -1038,17 +1043,18 @@ class Option(Generic[T, DT]):  # type: ignore
     __slots__ = (
         "default",
         "description",
+        "name",
     )
 
-    def __init__(self, default: T = inspect.Parameter.empty, *, description: DT) -> None:
+    def __init__(
+        self, default: T = inspect.Parameter.empty, *, description: DT, name: str = discord.utils.MISSING
+    ) -> None:
         self.description = description
         self.default = default
+        self.name: str = name
 
 
-if TYPE_CHECKING:
-    # Terrible workaround for type checking reasons
-    def Option(default: T = inspect.Parameter.empty, *, description: str) -> T:
-        ...
+Option: Any
 
 
 def _convert_to_bool(argument: str) -> bool:

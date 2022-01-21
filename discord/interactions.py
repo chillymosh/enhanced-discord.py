@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 
     from .types.interactions import (
         Interaction as InteractionPayload,
+        ApplicationCommandOptionChoice,
         InteractionData,
     )
     from .guild import Guild
@@ -332,7 +333,8 @@ class Interaction:
         )
 
         # The message channel types should always match
-        message = InteractionMessage(state=self._state, channel=self.channel, data=data)  # type: ignore
+        state = _InteractionMessageState(self, self._state)
+        message = InteractionMessage(state=state, channel=self.channel, data=data)  # type: ignore
         if view and not view.is_finished():
             self._state.store_view(view, message.id)
         return message
@@ -460,6 +462,7 @@ class InteractionResponse:
         view: View = MISSING,
         tts: bool = False,
         ephemeral: bool = False,
+        delete_after: float = MISSING,
     ) -> None:
         """|coro|
 
@@ -539,6 +542,17 @@ class InteractionResponse:
             self._parent._state.store_view(view)
 
         self.responded_at = utils.utcnow()
+
+        if delete_after is not MISSING:
+
+            async def delete(delay: float):
+                await asyncio.sleep(delay)
+                try:
+                    await parent.delete_original_message()
+                except HTTPException:
+                    pass
+
+            asyncio.create_task(delete(delete_after))
 
     async def edit_message(
         self,
@@ -629,6 +643,43 @@ class InteractionResponse:
 
         if view and not view.is_finished():
             state.store_view(view, message_id)
+
+        self.responded_at = utils.utcnow()
+
+    async def autocomplete_result(self, choices: List[ApplicationCommandOptionChoice]):
+        """|coro|
+
+        Responds to this autocomplete interaction with the resulting choices.
+        This should rarely be used.
+
+        Parameters
+        -----------
+        choices: List[Dict[:class:`str`, :class:`str`]]
+            The choices to be shown in the autocomplete UI of the user.
+            Must be a list of dictionaries with the ``name`` and ``value`` keys.
+
+        Raises
+        -------
+        HTTPException
+            Responding to the interaction failed.
+        InteractionResponded
+            This interaction has already been responded to before.
+        """
+        if self.is_done():
+            raise InteractionResponded(self._parent)
+
+        parent = self._parent
+        if parent.type is not InteractionType.application_command_autocomplete:
+            return
+
+        adapter = async_context.get()
+        await adapter.create_interaction_response(
+            parent.id,
+            parent.token,
+            session=parent._session,
+            type=InteractionResponseType.application_command_autocomplete_result.value,
+            data={"choices": choices},
+        )
 
         self.responded_at = utils.utcnow()
 
